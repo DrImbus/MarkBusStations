@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stationen speichern</title>
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.3/dist/leaflet.css"
+    integrity="sha256-kLaT2GOSpHechhsozzB+flnD+zUyjE2LlfWPgU04xyI="
+    crossorigin=""/>
+    <script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js"
+    integrity="sha256-WBkoXOwTeyKclOHuWtc+i2uENFpDZ9YPdf5Hf+D7ewM="
+    crossorigin=""></script>
+
+    <style>
+        #map_container{
+            width:100%;
+            height: 55vh;
+            border: 1px solid blue;
+        }
+
+        #stations_list{
+            height: 40vh;
+            width: 600px;
+            overflow: scroll;
+            border: solid 1px blue;
+        }
+
+        .leaflet-grab {
+            cursor: auto;
+        }
+        .leaflet-dragging .leaflet-grab{
+            cursor: move;
+        }
+
+
+        .grid{
+            width: 500px;
+            display: grid;
+            grid-template-areas: 
+                "name_label name_input"
+                "position button";
+            gap: 5px 5px;
+            
+            box-shadow: rgba(100, 100, 111, 0.2) 0px 7px 29px 0px;
+            margin: 20px 5px 20px 20px;
+            padding: 5px;
+            transition: .5s;
+            background-color: #ffffff;
+        }
+
+        .grid:hover{
+            background-color: #ffebcd;
+        }
+
+        
+
+        .grid > *{
+            margin: 5px 0px;
+        }
+
+    </style>
+
+</head>
+<body>
+    <div id="map_container"></div>
+
+
+    <div id="stations_list">
+
+
+
+    </div>
+
+    <script type="text/javascript" src = "./util.js"></script>
+    <script type="text/javascript">
+       
+        
+
+        //create Map
+        var map = L.map('map_container');
+        map.setView([50.939, 6.955], 13);
+        tl = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+        });
+        tl.addTo(map);
+
+        /*
+        station_list enhält alle station-object im format
+        {
+            "index": index_counter,
+            "position": [lat,lng],
+            "marker": stationMarker,
+            "item": station_item,
+            "name": "Station ohne Name"
+        }
+        */
+        const station_list = document.getElementById('stations_list');
+
+
+        var stations = [];
+        var index_counter = 0;
+
+        
+        map.on("click",evt => {
+
+            //position of the click
+            const {lat, lng} = evt.latlng;
+            
+            /*************************************************
+             *
+                        CREATE STATION MARKER
+
+            ***************************************************/
+            const stationMarker = L.marker([lat,lng], {draggable: true, autopan: true});
+            stationMarker.addTo(map);
+            stationMarker.bindPopup(`<b>Station ohne Namen</b><br>(${util.round(lat,4)},${util.round(lng,4)})`)
+
+
+            //open and close the popup on hover
+            stationMarker.on('mouseover', function (e) {
+                this.openPopup();
+            });
+
+            //bring the station-item into view and highlight it
+            stationMarker.on('click', function (e) {
+                station_element = stations.filter(element => {
+                    return element.marker == stationMarker;
+                })[0];
+                station_element.item.scrollIntoView(true);
+                station_element.item.style = "background-color: #ffebcd";
+            });
+
+            //remove the popup and highlighting of the div-item
+            stationMarker.on('mouseout', function (e) {
+                this.closePopup();
+
+                //remove highlighting of station item
+                station_element = stations.filter(element => {
+                    return element.marker == stationMarker;
+                })[0];
+                station_element.item.style = "";
+            });
+            
+            //ondrag update the position in stations-array aswell as the popup and the div station-item
+            stationMarker.on('drag', e => {
+                filtered_station = stations.filter(element => {
+                    return element.marker == e.target
+                })[0];
+                const lat = e.latlng.lat;
+                const lng = e.latlng.lng
+                filtered_station.position = [lat, lng];
+                filtered_station.item.childNodes[2].innerText = `position: (${util.round(lat,4)},${util.round(lng,4)})`;
+                e.target.setPopupContent(`<b>${filtered_station.name}</b><br>(${util.round(lat,4)},${util.round(lng,4)})`)
+            });
+
+            //open the popup once the marker was dragged
+            stationMarker.on("dragend", e => {
+                e.target.openPopup();
+            });
+
+            /*************************************************
+             *
+                        CREATE STATION ITEM
+
+            ***************************************************/
+            var station_item = document.createElement("div");
+            station_item.setAttribute("class","grid")
+            station_item.setAttribute("index",index_counter);
+            
+            //when the mouse enters the item open the marker popup
+            station_item.onclick /*onmouseenter*/ = evt => {
+                try{
+                    filter_marker = stations.filter(element => {
+                    return element.index == evt.srcElement.getAttribute("index");
+                    })[0].marker;
+                    filter_marker.openPopup();  
+                }catch{
+                    filter_marker = stations.filter(element => {
+                    return element.index == evt.srcElement.parentElement.getAttribute("index");
+                    })[0].marker;
+                    filter_marker.openPopup();   
+                }
+                          
+            }
+
+            //when the mouse leaves the item close the popup
+            station_item.onmouseleave   = evt => {
+                filter_marker = stations.filter(element => {
+                    return element.index == evt.srcElement.getAttribute("index");
+                })[0].marker;
+                filter_marker.closePopup();    
+            }
+
+
+            /*************************************************
+             *
+                        CREATE STATION CONTENTS
+
+            ***************************************************/
+
+            //creating the name label
+            const name_label = document.createElement("p");
+            name_label.setAttribute("grid-area","name_label");
+            name_label.innerText = "Name der Station: ";
+
+
+
+            //creating the input field
+            const name_input = document.createElement("input");
+            name_input.setAttribute("grid-area","name_input");
+            name_input.setAttribute('type','text');
+
+            //when the input changes update the name in stations-array and marker-popup
+            name_input.oninput = evt => {
+
+                const value = evt.srcElement.value;
+
+                const station = filter_marker = stations.filter(element => {
+                    return element.index == evt.srcElement.parentElement.getAttribute("index");
+                })[0];
+                station.name = value;
+                station.marker.setPopupContent(`<b>${value}</b><br>(${util.round(lat,4)},${util.round(lng,4)})`);
+            };
+
+
+            //show the position of the station
+            const position_display = document.createElement("p");
+            position_display.setAttribute("grid-area","position");
+            position_display.setAttribute("name","position");
+            position_display.innerText = "position: (" + util.round(lat,4) + "," + util.round(lng,4) + ")";
+
+
+            //creating the delete button
+            const delete_button = document.createElement("button");
+            delete_button.setAttribute("grid-area","button");
+            delete_button.setAttribute("type","button");
+            delete_button.innerText = "delete";
+
+            //when the button is clicked remove the marker and the item-div aswell as the entry in stations-array 
+            delete_button.onclick = evt => {
+                index_to_remove = evt.srcElement.parentElement.getAttribute("index");
+                elements_to_remove = stations.filter(element => {
+                    return element.index == index_to_remove;
+                })[0];
+                //removing the div-item;
+                elements_to_remove.item.remove();
+                //remove the marker
+                map.removeLayer(elements_to_remove.marker);
+                //remove element from stations-array
+                stations = stations.filter(element => {
+                    return element.index != index_to_remove;
+                });
+            };
+
+            //add all the elements to the station-item div
+            station_item.appendChild(name_label);
+            station_item.appendChild(name_input);
+            station_item.appendChild(position_display);
+            station_item.appendChild(delete_button);
+            //add the station-item div to the station_list container (also a div)
+            station_list.appendChild(station_item);
+
+            //add the station to the stations array without a name
+            stations.push({
+                "index": index_counter,
+                "position": [lat,lng],
+                "marker": stationMarker,
+                "item": station_item,
+                "name": "Station ohne Name"
+            });
+
+            //update the index_counter
+            index_counter++;
+
+        })
+
+    </script>
+</body>
+</html>
